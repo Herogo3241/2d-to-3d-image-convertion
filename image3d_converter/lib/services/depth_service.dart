@@ -99,6 +99,8 @@ class DepthEstimator {
       }
     }
 
+    print(depth);
+
     return depth;
   }
 
