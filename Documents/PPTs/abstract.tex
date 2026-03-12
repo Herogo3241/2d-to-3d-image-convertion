@@ -1,0 +1,46 @@
+% filepath: c:\Users\ivinm\D-Drive\Repos\FinalYr_Project\S8\abstract.tex
+\documentclass[13pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{setspace}
+\usepackage{ragged2e}  % For justification control
+\setlength{\parindent}{0pt}  % Remove paragraph indentation
+
+% Title and Author Info
+\title{\fontsize{20pt}{24pt}\selectfont \textbf{Offline 2D-to-3D Reconstruction System for ARM-Based Mobile Devices}}
+
+\author{%
+Goureesh Chandra (TVE22CS069),\\ 
+Ivin Mathew Kurian (TVE22CS075), \\
+Muhammed Farhan (TVE22CS094), \\
+Rethin Francis (LTVE22CS149) \\
+\vspace{1cm}
+Advisor: Prof. Divya S K \\
+College of Engineering, Trivandrum, Dept. of Computer Science \& Engineering
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\renewcommand{\abstractname}{}
+\begin{abstract}
+\centering
+\fontsize{16pt}{20pt}\selectfont \textbf{Abstract}
+\vspace{0.5cm}
+\justify
+\fontsize{12pt}{15pt}\selectfont
+
+\noindent Recent advancements in computer vision have enabled the reconstruction of three-dimensional structure from ordinary two-dimensional images, but most existing solutions depend on cloud servers or high-performance computers, making them unsuitable for resource-constrained and offline environments. This project proposes a fully offline 2D-to-3D reconstruction system optimised for mobile devices, combining lightweight neural networks for depth estimation with geometric processing techniques. The system captures one or more images using a smartphone camera, estimates the depth information for each frame using an on-device model, calculates camera positions through feature matching, and combines multiple depth maps into a unified 3D representation using an efficient integration method. Finally, a surface mesh is extracted and displayed in real time on the mobile device, enabling portable 3D scanning without internet connectivity or external computation.
+
+\noindent The proposed method demonstrates that accurate and usable 3D reconstruction can be achieved entirely on low-power mobile processors by leveraging model optimisation techniques. Applications include mobile 3D scanning, augmented reality content creation, digital asset generation, architectural measurement, reverse engineering, medical and industrial imaging, and offline robotics perception. This system addresses the growing need for privacy-preserving, low-latency, and cost-efficient 3D reconstruction tools by eliminating cloud dependence and enabling real-time processing directly on-device. The project serves as an efficient, scalable alternative to commercial cloud-based 3D scanning platforms and contributes toward democratizing 3D reconstruction for mobile and embedded systems.
+
+\end{abstract}
+
+\end{document}
