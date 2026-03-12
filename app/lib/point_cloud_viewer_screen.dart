@@ -6,6 +6,9 @@ import 'dart:convert';
 import 'package:image/image.dart' as img;
 import 'dart:math' as math;
 import 'package:share_plus/share_plus.dart';
+import 'package:archive/archive_io.dart';
+import 'package:flutter_cube/flutter_cube.dart' as cube;
+import 'package:vector_math/vector_math_64.dart' as vmath;
 import 'utils/session_metadata.dart';
 import 'utils/mesh_generator.dart';
 
@@ -37,8 +40,7 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
   Mesh? _mesh;
   MeshExportResult? _meshExportResult;
   bool _generatingMesh = false;
-  bool _showMesh = false; // Toggle between point cloud and mesh view
-  bool _isInteractingWithMesh = false;
+  bool _isSharingMesh = false;
 
   @override
   void initState() {
@@ -375,11 +377,11 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
 
           double z;
           if (usingMidas) {
-            // MiDaS saved format: higher uint16 values = closer objects
-            // Normalize to 0-1 (1 = closest)
+            // MiDaS saved map in this pipeline is relative inverse to metric depth.
+            // Normalize to 0..1 where higher value means farther scene content.
             final normalizedDepth = (depthValue.toDouble() - minDepth) / (maxDepth - minDepth);
-            // Convert to metric depth: high value -> small z (close), low value -> large z (far)
-            z = 3.0 - (normalizedDepth * 2.5); // Maps to 0.5m (close) to 3.0m (far)
+            // Convert to metric depth: low value -> close, high value -> far
+            z = 0.5 + (normalizedDepth * 2.5); // Maps to 0.5m (close) to 3.0m (far)
           } else {
             // ARCore: already in millimeters
             z = depthValue / 1000.0;
@@ -414,7 +416,6 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         _pointCloud = points;
         _mesh = null; // Reset mesh when regenerating point cloud
         _meshExportResult = null;
-        _showMesh = false;
         final depthInfo = usingMidas && minDepth != double.infinity 
             ? ' | Range: ${(minDepth/256/1000).toStringAsFixed(2)}-${(maxDepth/256/1000).toStringAsFixed(2)}m'
             : '';
@@ -453,13 +454,16 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
       final sourceImage = img.decodeImage(imageBytes);
       
       // Generate mesh from point cloud using rolling-ball triangulation
-      final mesh = MeshGenerator.generateWithBallRolling(
+      final rawMesh = MeshGenerator.generateWithBallRolling(
         points: _pointCloud!,
         ballRadius: 0.08,
         maxEdgeLength: 0.18,
         maxNeighbors: 12,
         voxelSize: 0.03,
       );
+
+      // Keep a render-safe triangle budget to avoid runtime parser/render stalls.
+      final mesh = _decimateMeshForRuntime(rawMesh, maxTriangles: 22000);
 
       if (mesh.triangleCount == 0) {
         throw Exception('Mesh generation produced no valid faces. Try another frame or depth map.');
@@ -481,7 +485,6 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         _mesh = mesh;
         _meshExportResult = exportResult;
         _generatingMesh = false;
-        _showMesh = true;
         _statusMessage =
             'Mesh (Ball Rolling): ${exportResult.vertexCount} vertices, ${exportResult.triangleCount} triangles';
       });
@@ -509,20 +512,28 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
   }
 
   Future<void> _shareMesh() async {
-    if (_meshExportResult == null) return;
+    if (_meshExportResult == null || _isSharingMesh) return;
 
     try {
-      final files = [
-        XFile(_meshExportResult!.objPath),
-        XFile(_meshExportResult!.mtlPath),
-        XFile(_meshExportResult!.texturePath),
-      ];
+      setState(() {
+        _isSharingMesh = true;
+      });
+
+      // Share as a single zip to reduce memory pressure and avoid activity crashes.
+      final result = _meshExportResult!;
+      final zipPath = result.objPath.replaceAll('.obj', '.zip');
+      final encoder = ZipFileEncoder();
+      encoder.create(zipPath);
+      encoder.addFile(File(result.objPath));
+      encoder.addFile(File(result.mtlPath));
+      encoder.addFile(File(result.texturePath));
+      encoder.close();
       
       await SharePlus.instance.share(
         ShareParams(
-          files: files,
+          files: [XFile(zipPath)],
           subject: '3D Mesh Export',
-          text: 'Exported 3D mesh with ${_meshExportResult!.vertexCount} vertices',
+          text: 'Exported 3D mesh (${result.vertexCount} vertices) as ZIP',
         ),
       );
     } catch (e) {
@@ -530,7 +541,44 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error sharing: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSharingMesh = false;
+        });
+      }
     }
+  }
+
+  Future<void> _openRenderedMeshViewer() async {
+    if (_meshExportResult == null || !mounted) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RenderedMeshViewerScreen(
+          objPath: _meshExportResult!.objPath,
+          texturePath: _meshExportResult!.texturePath,
+        ),
+      ),
+    );
+  }
+
+  Mesh _decimateMeshForRuntime(Mesh mesh, {required int maxTriangles}) {
+    if (mesh.triangleCount <= maxTriangles) return mesh;
+
+    final stride = (mesh.triangleCount / maxTriangles).ceil();
+    final reduced = <Triangle>[];
+    for (int i = 0; i < mesh.triangles.length; i += stride) {
+      reduced.add(mesh.triangles[i]);
+    }
+
+    return Mesh(
+      vertices: mesh.vertices,
+      triangles: reduced,
+      textureWidth: mesh.textureWidth,
+      textureHeight: mesh.textureHeight,
+    );
   }
 
   @override
@@ -649,7 +697,6 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                       : GestureDetector(
                           onScaleStart: (details) {
                             setState(() {
-                              _isInteractingWithMesh = true;
                               _offsetX = 0.0;
                               _offsetY = 0.0;
                             });
@@ -675,30 +722,18 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                             });
                           },
                           onScaleEnd: (details) {
-                            setState(() {
-                              _isInteractingWithMesh = false;
-                            });
+                            // no-op
                           },
                           child: RepaintBoundary(
                             child: CustomPaint(
-                              painter: _showMesh && _mesh != null
-                                  ? MeshPainter(
-                                      mesh: _mesh!,
-                                      rotationX: _rotationX,
-                                      rotationY: _rotationY,
-                                      zoom: _zoom,
-                                      offsetX: _offsetX + _panX * 100,
-                                      offsetY: _offsetY + _panY * 100,
-                                      interactionMode: _isInteractingWithMesh,
-                                    )
-                                  : PointCloudPainter(
-                                      points: _pointCloud!,
-                                      rotationX: _rotationX,
-                                      rotationY: _rotationY,
-                                      zoom: _zoom,
-                                      offsetX: _offsetX + _panX * 100,
-                                      offsetY: _offsetY + _panY * 100,
-                                    ),
+                              painter: PointCloudPainter(
+                                points: _pointCloud!,
+                                rotationX: _rotationX,
+                                rotationY: _rotationY,
+                                zoom: _zoom,
+                                offsetX: _offsetX + _panX * 100,
+                                offsetY: _offsetY + _panY * 100,
+                              ),
                               size: Size.infinite,
                             ),
                           ),
@@ -780,27 +815,29 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
                             if (_mesh != null) ...[
-                              // Toggle view mode
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text('Mesh', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                  Switch(
-                                    value: _showMesh,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _showMesh = value;
-                                      });
-                                    },
-                                    activeColor: Colors.green,
-                                  ),
-                                ],
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.threed_rotation, size: 16),
+                                label: const Text('View Rendered 3D'),
+                                onPressed: _meshExportResult != null ? _openRenderedMeshViewer : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
                               ),
                               // Share button
                               ElevatedButton.icon(
-                                icon: const Icon(Icons.share, size: 16),
-                                label: const Text('Export'),
-                                onPressed: _meshExportResult != null ? _shareMesh : null,
+                                icon: _isSharingMesh
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        ),
+                                      )
+                                    : const Icon(Icons.share, size: 16),
+                                label: Text(_isSharingMesh ? 'Preparing...' : 'Export'),
+                                onPressed: _meshExportResult != null && !_isSharingMesh ? _shareMesh : null,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.green,
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1207,5 +1244,114 @@ class MeshPainter extends CustomPainter {
         oldDelegate.offsetX != offsetX ||
         oldDelegate.offsetY != offsetY ||
         oldDelegate.interactionMode != interactionMode;
+  }
+}
+
+class RenderedMeshViewerScreen extends StatefulWidget {
+  final String objPath;
+  final String texturePath;
+
+  const RenderedMeshViewerScreen({
+    super.key,
+    required this.objPath,
+    required this.texturePath,
+  });
+
+  @override
+  State<RenderedMeshViewerScreen> createState() => _RenderedMeshViewerScreenState();
+}
+
+class _RenderedMeshViewerScreenState extends State<RenderedMeshViewerScreen> {
+  String? _error;
+  bool _sceneReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _validateFiles();
+  }
+
+  Future<void> _validateFiles() async {
+    final objExists = await File(widget.objPath).exists();
+    final texExists = await File(widget.texturePath).exists();
+
+    if (!objExists) {
+      setState(() {
+        _error = 'OBJ file missing at ${widget.objPath}';
+      });
+      return;
+    }
+
+    if (!texExists) {
+      // Not fatal for viewing, but useful context for user.
+      setState(() {
+        _error = 'Texture missing. Mesh can still render without texture.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Rendered Mesh Viewer'),
+      ),
+      body: Stack(
+        children: [
+          cube.Cube(
+            onSceneCreated: (cube.Scene scene) {
+              try {
+                scene.camera.zoom = 10;
+                scene.camera.position.setValues(0, 0, 10);
+
+                final object = cube.Object(
+                  fileName: widget.objPath,
+                  isAsset: false,
+                  scale: vmath.Vector3.all(1.0),
+                  position: vmath.Vector3.zero(),
+                  rotation: vmath.Vector3.zero(),
+                );
+
+                scene.world.add(object);
+
+                if (mounted) {
+                  setState(() {
+                    _sceneReady = true;
+                    if (_error != null && _error!.startsWith('Texture missing')) {
+                      // keep non-fatal warning hidden after scene loads
+                      _error = null;
+                    }
+                  });
+                }
+              } catch (e) {
+                if (mounted) {
+                  setState(() {
+                    _error = 'Failed to load mesh: $e';
+                  });
+                }
+              }
+            },
+          ),
+          if (!_sceneReady && _error == null)
+            const Center(child: CircularProgressIndicator()),
+          if (_error != null)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

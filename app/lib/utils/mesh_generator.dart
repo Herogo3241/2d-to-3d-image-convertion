@@ -337,7 +337,7 @@ class MeshGenerator {
         double z;
         if (isMidasDepth) {
           final normalizedDepth = (depthValue.toDouble() - minDepth) / (maxDepth - minDepth);
-          z = 3.0 - (normalizedDepth * 2.5);
+          z = 0.5 + (normalizedDepth * 2.5);
         } else {
           z = depthValue / 1000.0;
         }
