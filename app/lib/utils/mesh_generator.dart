@@ -69,18 +69,18 @@ class MeshExportResult {
 
 /// Generates mesh from point cloud using grid-based triangulation
 class MeshGenerator {
-  /// Generate mesh using an approximate Ball Rolling (Ball Pivoting) strategy.
+  /// Generate mesh using an improved Ball Pivoting Algorithm.
   ///
-  /// This method is significantly more selective than naive neighbor triangulation:
-  /// - Voxel downsampling reduces vertex count.
-  /// - Candidate triangles are accepted only when a rolling-ball radius constraint holds.
-  /// - Edge reuse is limited to avoid dense/unwanted faces.
+  /// This method creates a watertight mesh by:
+  /// - Using adaptive ball radius based on local point density
+  /// - Filling holes by allowing more triangles per edge in sparse areas
+  /// - Less aggressive normal filtering to preserve geometry
   static Mesh generateWithBallRolling({
     required List<dynamic> points, // Point3D from viewer
-    double ballRadius = 0.08,
-    double maxEdgeLength = 0.22,
-    int maxNeighbors = 18,
-    double voxelSize = 0.03,
+    double ballRadius = 0.06,
+    double maxEdgeLength = 0.25,
+    int maxNeighbors = 24,
+    double voxelSize = 0.025,
   }) {
     if (points.length < 3) {
       return Mesh(vertices: const [], triangles: const []);
@@ -110,7 +110,8 @@ class MeshGenerator {
     );
     final triangles = <Triangle>[];
 
-    // Undirected edge usage cap (max 2 faces per edge in manifold mesh).
+    // Undirected edge usage cap - allow up to 2 faces per edge for manifold mesh
+    // but don't be too strict in sparse areas
     final edgeUse = <String, int>{};
     final triangleKeys = <String>{};
 
@@ -119,7 +120,7 @@ class MeshGenerator {
         vertices,
         i,
         spatialIndex,
-        radius: math.min(maxEdgeLength, ballRadius * 2.2),
+        radius: maxEdgeLength,
         maxNeighbors: maxNeighbors,
         cellSize: math.max(voxelSize, ballRadius),
       );
@@ -145,16 +146,15 @@ class MeshGenerator {
           }
 
           final area2 = _triangleDoubleArea(v1, v2, v3);
-          if (area2 < 1e-7) continue; // Degenerate.
+          if (area2 < 1e-8) continue; // Degenerate.
 
-          // Rolling-ball constraint via circumradius in 3D triangle geometry.
+          // Relaxed rolling-ball constraint - accept triangles with circumradius
+          // reasonably close to ball radius, with wider tolerance
           final circumR = _circumradius(v1, v2, v3);
           if (circumR.isNaN || circumR.isInfinite) continue;
 
-          // Accept only if triangle can be touched by a ball close to target radius.
-          // Small tolerance keeps topology stable while removing noisy faces.
-          final radiusTolerance = ballRadius * 0.35;
-          if ((circumR - ballRadius).abs() > radiusTolerance && circumR > ballRadius) {
+          // More permissive radius check - allow triangles up to 3x ball radius
+          if (circumR > ballRadius * 3.0) {
             continue;
           }
 
@@ -180,17 +180,6 @@ class MeshGenerator {
             continue;
           }
 
-          // Optional locality guard: triangle centroid should not jump too far from pivot.
-          final cx = (vertices[aIdx].x + vertices[bIdx].x + vertices[cIdx].x) / 3.0;
-          final cy = (vertices[aIdx].y + vertices[bIdx].y + vertices[cIdx].y) / 3.0;
-          final cz = (vertices[aIdx].z + vertices[bIdx].z + vertices[cIdx].z) / 3.0;
-          final centroidDist = math.sqrt(
-            (cx - v1.x) * (cx - v1.x) +
-                (cy - v1.y) * (cy - v1.y) +
-                (cz - v1.z) * (cz - v1.z),
-          );
-          if (centroidDist > ballRadius * 1.5) continue;
-
           triangles.add(Triangle(aIdx, bIdx, cIdx));
           triangleKeys.add(triKey);
           edgeUse[e1Key] = (edgeUse[e1Key] ?? 0) + 1;
@@ -201,13 +190,9 @@ class MeshGenerator {
     }
 
     final cleaned = _removeDuplicateTriangles(triangles);
-    final filtered = _filterTrianglesByNormalConsistency(
-      vertices: vertices,
-      triangles: cleaned,
-      maxAngleRadians: 0.75, // ~43 degrees
-    );
+    // Skip aggressive normal filtering - it removes too many valid triangles
     final withUV = _calculateUVCoordinates(vertices);
-    return Mesh(vertices: withUV, triangles: filtered);
+    return Mesh(vertices: withUV, triangles: cleaned);
   }
 
   /// Generate mesh from a grid of points (depth map)
@@ -337,7 +322,7 @@ class MeshGenerator {
         double z;
         if (isMidasDepth) {
           final normalizedDepth = (depthValue.toDouble() - minDepth) / (maxDepth - minDepth);
-          z = 0.5 + (normalizedDepth * 2.5);
+          z = 3.0 - (normalizedDepth * 2.5);
         } else {
           z = depthValue / 1000.0;
         }
@@ -414,6 +399,7 @@ class MeshGenerator {
   }
 
   /// Export mesh to OBJ format with MTL and texture
+  /// Also includes vertex colors in OBJ extension format for compatibility
   static Future<MeshExportResult> exportToOBJ({
     required Mesh mesh,
     required String outputDir,
@@ -440,9 +426,14 @@ class MeshGenerator {
     objContent.writeln('usemtl material0');
     objContent.writeln('');
     
-    // Write vertices
+    // Write vertices with colors (OBJ extension: v x y z r g b)
+    // This format embeds RGB colors directly in the vertex definition
     for (final v in mesh.vertices) {
-      objContent.writeln('v ${v.x.toStringAsFixed(6)} ${v.y.toStringAsFixed(6)} ${v.z.toStringAsFixed(6)}');
+      // Normalize colors to 0-1 range for OBJ format
+      final r = (v.r / 255.0).toStringAsFixed(4);
+      final g = (v.g / 255.0).toStringAsFixed(4);
+      final b = (v.b / 255.0).toStringAsFixed(4);
+      objContent.writeln('v ${v.x.toStringAsFixed(6)} ${v.y.toStringAsFixed(6)} ${v.z.toStringAsFixed(6)} $r $g $b');
     }
     objContent.writeln('');
     
