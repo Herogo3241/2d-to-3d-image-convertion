@@ -447,11 +447,36 @@ Image Capture $\rightarrow$ Depth Estimation $\rightarrow$ Point Cloud Generatio
 
 \begin{frame}{Performance Analysis}
 \begin{itemize}
-\item Average depth estimation time: 0.5–1 second per frame
+\item Average depth estimation time: 0.5-1 second per frame
 \item Point cloud generation: Real-time processing
 \item Memory usage optimized for mobile devices
 \item CPU-based rendering reduces GPU dependency
 \end{itemize}
+\end{frame}
+
+\begin{frame}{Result of Benchmark}
+    \textbf{1. ARM64 Mobile Device (Nothing Phone 2a - MediaTek Dimensity 7200 Pro)}
+    \begin{center}
+    \includegraphics[width=0.96\textwidth]{benchmark_mob.jpg}
+    \end{center}
+    
+    \vspace{0.3cm}
+    
+    \textbf{2. x86\_64 Desktop (Intel Core Ultra 7 255H)}
+    \begin{center}
+    \includegraphics[width=0.96\textwidth]{benchmark_lap.jpg}
+    \end{center}
+\end{frame}
+
+\begin{frame}{Result of Benchmark}
+    \vspace{0.3cm}
+    \textbf{Key Observations:}
+    \begin{itemize}
+        \item \textbf{Architectural Throughput Gap:} The x86\_64 computational host processes frames approximately 6.5$\times$ faster than the ARM64 edge device.
+        \item \textbf{Edge Viability:} Achieving sub-150ms latency entirely on a mobile CPU demonstrates that the model is highly viable for near-real-time edge deployment.
+        \item \textbf{Memory Determinism:} Peak RAM allocation remains strictly consistent ($\sim$160 MB) despite crossing distinct OS boundaries and hardware instruction sets.
+    \end{itemize}
+    
 \end{frame}
 
 \section{Future Prospects}
