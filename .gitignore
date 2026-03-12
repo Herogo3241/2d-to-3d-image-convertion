@@ -12,17 +12,18 @@ ios
 
 #AR image outputs
 visualizations/session_*
-Documents/PPTs/abstract.aux
-Documents/PPTs/abstract.fdb_latexmk
-Documents/PPTs/abstract.fls
-Documents/PPTs/abstract.log
-Documents/PPTs/abstract.synctex.gz
-Documents/PPTs/s8_reviews.aux
-Documents/PPTs/s8_reviews.fdb_latexmk
-Documents/PPTs/s8_reviews.fls
-Documents/PPTs/s8_reviews.log
-Documents/PPTs/s8_reviews.nav
-Documents/PPTs/s8_reviews.out
-Documents/PPTs/s8_reviews.snm
-Documents/PPTs/s8_reviews.synctex.gz
-Documents/PPTs/s8_reviews.toc
+
+#Latex compiler outputs
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.toc
