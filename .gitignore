@@ -3,7 +3,7 @@ model/__pycache__/
 
 benchmark/platform-tools/
 .venv/
-.venv
+
 
 #Unused folders from flutter
 linux
