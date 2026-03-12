@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'dart:convert';
 
 class ArCaptureScreen extends StatefulWidget {
   const ArCaptureScreen({super.key});
@@ -18,11 +21,24 @@ class _ArCaptureScreenState extends State<ArCaptureScreen> {
   String? _depthPath;
   List<double>? _pose;
   bool _hasPermissions = false;
+  final List<Map<String, dynamic>> _captures = [];
+  Directory? _sessionDirectory;
 
   @override
   void initState() {
     super.initState();
     _checkPermissions();
+    _createSessionDirectory();
+  }
+
+  Future<void> _createSessionDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final dir = Directory('${appDir.path}/captures/session_$timestamp');
+    await dir.create(recursive: true);
+    setState(() {
+      _sessionDirectory = dir;
+    });
   }
 
   Future<void> _checkPermissions() async {
@@ -54,24 +70,53 @@ class _ArCaptureScreenState extends State<ArCaptureScreen> {
   }
 
   Future<void> _capture() async {
+    if (_sessionDirectory == null) return;
     try {
       setState(() {
         _status = 'Capturing...';
       });
       
-      final Map<dynamic, dynamic> result = await _channel.invokeMethod('captureFrame');
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod('captureFrame', {
+        'dirPath': _sessionDirectory!.path,
+      });
       
+      final imagePath = result['imagePath'] as String?;
+      final depthPath = result['depthPath'] as String?;
+      final poseList = result['relativePose'] as List<dynamic>?;
+      final pose = poseList?.cast<double>();
+
+      if (imagePath != null && depthPath != null && pose != null) {
+        final captureData = {
+          'imagePath': imagePath,
+          'depthPath': depthPath,
+          'relativePose': pose,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        _captures.add(captureData);
+        await _saveCaptures();
+      }
+
       setState(() {
-        _imagePath = result['imagePath'] as String?;
-        _depthPath = result['depthPath'] as String?;
-        final poseList = result['relativePose'] as List<dynamic>?;
-        _pose = poseList?.cast<double>();
-        _status = 'Capture Success';
+        _imagePath = imagePath;
+        _depthPath = depthPath;
+        _pose = pose;
+        _status = 'Capture Success (${_captures.length} saved)';
       });
     } on PlatformException catch (e) {
       setState(() {
         _status = 'Capture Error: ${e.message}';
       });
+    }
+  }
+
+  Future<void> _saveCaptures() async {
+    if (_captures.isEmpty || _sessionDirectory == null) return;
+    try {
+      final file = File('${_sessionDirectory!.path}/captures.json');
+      await file.writeAsString(jsonEncode(_captures));
+      print('Saved ${_captures.length} captures to ${file.path}');
+    } catch (e) {
+      print('Error saving captures: $e');
     }
   }
 
