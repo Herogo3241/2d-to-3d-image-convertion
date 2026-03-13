@@ -10,6 +10,7 @@ import 'package:flutter_cube/flutter_cube.dart' as cube;
 import 'package:vector_math/vector_math_64.dart' as vm;
 import 'utils/session_metadata.dart';
 import 'utils/mesh_generator.dart';
+import 'utils/snackbar_helper.dart';
 
 /// Helper to create a flutter_cube Object with vertex colors from our Mesh
 cube.Object createColoredMeshObject(Mesh mesh) {
@@ -144,14 +145,10 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         if (!mounted) return;
         setState(() {}); // Refresh the list
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session name updated successfully')),
-        );
+        showTopSuccessSnackBar(context, 'Session name updated successfully');
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update name: $e')),
-        );
+        showTopErrorSnackBar(context, 'Failed to update name: $e');
       }
     }
   }
@@ -183,15 +180,11 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         await _loadSessions();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Session deleted successfully')),
-          );
+          showTopSuccessSnackBar(context, 'Session deleted successfully');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e')),
-          );
+          showTopErrorSnackBar(context, 'Failed to delete: $e');
         }
       }
     }
@@ -464,17 +457,13 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         _statusMessage = 'Error: $e';
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error generating point cloud: $e')),
-      );
+      showTopErrorSnackBar(context, 'Error generating point cloud: $e');
     }
   }
 
   Future<void> _generateMesh() async {
     if (_pointCloud == null || _pointCloud!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Generate point cloud first')),
-      );
+      showTopSnackBar(context, 'Generate point cloud first');
       return;
     }
 
@@ -528,20 +517,17 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
 
       if (!mounted) return;
       
-      // Show snackbar with auto-dismiss after 5 seconds
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
-      scaffoldMessenger.clearSnackBars();
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('Mesh exported: $baseName.obj'),
-          duration: const Duration(seconds: 5),
-          action: SnackBarAction(
-            label: 'Share',
-            onPressed: () {
-              scaffoldMessenger.hideCurrentSnackBar();
-              _shareMesh();
-            },
-          ),
+      // Show snackbar at top with auto-dismiss after 5 seconds
+      showTopSnackBar(
+        context,
+        'Mesh exported: $baseName.obj',
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Share',
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            _shareMesh();
+          },
         ),
       );
     } catch (e) {
@@ -550,9 +536,7 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         _statusMessage = 'Error generating mesh: $e';
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      showTopErrorSnackBar(context, 'Error: $e');
     }
   }
 
@@ -575,9 +559,7 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sharing: $e')),
-      );
+      showTopErrorSnackBar(context, 'Error sharing: $e');
     }
   }
 

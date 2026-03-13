@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:archive/archive_io.dart';
 import 'package:intl/intl.dart';
 import 'utils/session_metadata.dart';
+import 'utils/snackbar_helper.dart';
 
 class GalleryScreen extends StatefulWidget {
   const GalleryScreen({super.key});
@@ -93,14 +94,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
         if (!mounted) return;
         setState(() {}); // Refresh the list
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session name updated successfully')),
-        );
+        showTopSuccessSnackBar(context, 'Session name updated successfully');
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update name: $e')),
-        );
+        showTopErrorSnackBar(context, 'Failed to update name: $e');
       }
     }
   }
@@ -131,15 +128,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
         await _loadSessions();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Session deleted successfully')),
-          );
+          showTopSuccessSnackBar(context, 'Session deleted successfully');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e')),
-          );
+          showTopErrorSnackBar(context, 'Failed to delete: $e');
         }
       }
     }
@@ -162,9 +155,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       
       if (files.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No files to export in this session')),
-          );
+          showTopSnackBar(context, 'No files to export in this session');
         }
         return;
       }
@@ -229,9 +220,7 @@ for capture in data:
       await Share.shareXFiles([XFile(zipFile.path)], text: 'Export Session Data');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
+        showTopErrorSnackBar(context, 'Export failed: $e');
       }
     }
   }
