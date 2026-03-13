@@ -69,6 +69,100 @@ class MeshExportResult {
 
 /// Generates mesh from point cloud using grid-based triangulation
 class MeshGenerator {
+  /// Generate a mesh directly using the 2D grid structure of the depth map.
+  /// This creates a perfect continuous mesh without holes, except where depth jumps too much.
+  static Mesh generateGridMesh({
+    required List<dynamic> points, // Point3D list with gridX and gridY
+    double maxDepthDifference = 0.15, // max allowed distance between adjacent points in meters to form a triangle
+  }) {
+    if (points.length < 3) {
+      return Mesh(vertices: const [], triangles: const []);
+    }
+
+    final vertices = <Vertex>[];
+    // Map to lookup vertex index by grid coordinates (gridY * 10000 + gridX)
+    final gridMap = <int, int>{};
+    
+    // First pass: create vertices and map them
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+      vertices.add(Vertex(
+        x: p.x as double,
+        y: p.y as double,
+        z: p.z as double,
+        r: p.r as int,
+        g: p.g as int,
+        b: p.b as int,
+      ));
+      
+      final gridX = p.gridX as int;
+      final gridY = p.gridY as int;
+      gridMap[gridY * 10000 + gridX] = i;
+    }
+    
+    final triangles = <Triangle>[];
+    
+    // Determine the step size dynamically (could be 1 or 2 depending on downsampling)
+    int step = 1;
+    if (points.length > 1) {
+      final p1 = points[0];
+      final p2 = points[1];
+      if (p1.gridY == p2.gridY) {
+        step = ((p2.gridX as int) - (p1.gridX as int)).abs();
+      }
+    }
+    if (step == 0) step = 1;
+
+    // Second pass: triangulate grid
+    for (final p in points) {
+      final x = p.gridX as int;
+      final y = p.gridY as int;
+      
+      // Look for right, bottom, and bottom-right neighbors
+      final i1 = gridMap[y * 10000 + x];
+      final i2 = gridMap[y * 10000 + (x + step)];
+      final i3 = gridMap[(y + step) * 10000 + x];
+      final i4 = gridMap[(y + step) * 10000 + (x + step)];
+      
+      if (i1 != null) {
+        final v1 = vertices[i1];
+        
+        // Triangle 1: (x,y) - (x+step,y) - (x,y+step) => i1, i2, i3
+        if (i2 != null && i3 != null) {
+          final v2 = vertices[i2];
+          final v3 = vertices[i3];
+          
+          if ((v1.z - v2.z).abs() < maxDepthDifference && 
+              (v1.z - v3.z).abs() < maxDepthDifference && 
+              (v2.z - v3.z).abs() < maxDepthDifference) {
+            triangles.add(Triangle(i1, i2, i3));
+          }
+        }
+        
+        // Triangle 2: (x+step,y+step) - (x,y+step) - (x+step,y) => i4, i3, i2
+        if (i4 != null && i3 != null && i2 != null) {
+          final v2 = vertices[i2];
+          final v3 = vertices[i3];
+          final v4 = vertices[i4];
+          
+          if ((v4.z - v2.z).abs() < maxDepthDifference && 
+              (v4.z - v3.z).abs() < maxDepthDifference && 
+              (v2.z - v3.z).abs() < maxDepthDifference) {
+            triangles.add(Triangle(i4, i3, i2));
+          }
+        }
+      }
+    }
+
+    // Assign UV coordinates
+    final verticesWithUV = _calculateUVCoordinates(vertices);
+
+    return Mesh(
+      vertices: verticesWithUV,
+      triangles: triangles,
+    );
+  }
+
   /// Generate mesh using an improved Ball Pivoting Algorithm.
   ///
   /// This method creates a watertight mesh by:
@@ -693,85 +787,6 @@ class MeshGenerator {
     }
     
     return unique;
-  }
-
-  static List<Triangle> _filterTrianglesByNormalConsistency({
-    required List<Vertex> vertices,
-    required List<Triangle> triangles,
-    required double maxAngleRadians,
-  }) {
-    if (triangles.isEmpty) return triangles;
-
-    final normals = <List<double>>[];
-    for (final t in triangles) {
-      final n = _triangleNormal(vertices[t.v1], vertices[t.v2], vertices[t.v3]);
-      normals.add(n);
-    }
-
-    // Build vertex -> triangle adjacency.
-    final adjacency = List<List<int>>.generate(vertices.length, (_) => <int>[]);
-    for (int ti = 0; ti < triangles.length; ti++) {
-      final t = triangles[ti];
-      adjacency[t.v1].add(ti);
-      adjacency[t.v2].add(ti);
-      adjacency[t.v3].add(ti);
-    }
-
-    final kept = <Triangle>[];
-    for (int ti = 0; ti < triangles.length; ti++) {
-      final t = triangles[ti];
-      final n = normals[ti];
-
-      final neighbors = <int>{
-        ...adjacency[t.v1],
-        ...adjacency[t.v2],
-        ...adjacency[t.v3],
-      }..remove(ti);
-
-      if (neighbors.isEmpty) {
-        kept.add(t);
-        continue;
-      }
-
-      int similar = 0;
-      for (final nti in neighbors) {
-        final angle = _angleBetweenNormals(n, normals[nti]);
-        if (angle <= maxAngleRadians) {
-          similar++;
-        }
-      }
-
-      // Keep faces that agree with at least one neighboring face normal.
-      if (similar > 0) {
-        kept.add(t);
-      }
-    }
-
-    return kept;
-  }
-
-  static List<double> _triangleNormal(Vertex a, Vertex b, Vertex c) {
-    final ux = b.x - a.x;
-    final uy = b.y - a.y;
-    final uz = b.z - a.z;
-    final vx = c.x - a.x;
-    final vy = c.y - a.y;
-    final vz = c.z - a.z;
-
-    double nx = uy * vz - uz * vy;
-    double ny = uz * vx - ux * vz;
-    double nz = ux * vy - uy * vx;
-    final len = math.sqrt(nx * nx + ny * ny + nz * nz);
-    if (len <= 1e-10) return [0, 0, 1];
-    nx /= len;
-    ny /= len;
-    nz /= len;
-    return [nx, ny, nz];
-  }
-
-  static double _angleBetweenNormals(List<double> a, List<double> b) {
-    final dot = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]).clamp(-1.0, 1.0);
-    return math.acos(dot);
   }
   
   static List<Vertex> _calculateUVCoordinates(List<Vertex> vertices) {
