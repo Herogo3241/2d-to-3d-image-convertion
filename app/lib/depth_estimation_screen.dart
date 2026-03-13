@@ -40,13 +40,16 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
 
   Future<void> _loadModel() async {
     try {
-      _interpreter = await Interpreter.fromAsset('assets/models/midas_small.tflite');
+      _interpreter = await Interpreter.fromAsset(
+        'assets/models/midas_small.tflite',
+      );
       setState(() {
         _statusMessage = 'Model loaded successfully';
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Error loading model: $e\nPlease add midas_small.tflite to assets/models/';
+        _statusMessage =
+            'Error loading model: $e\nPlease add midas_small.tflite to assets/models/';
       });
     }
   }
@@ -67,7 +70,7 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
   Future<void> _renameSession(Directory sessionDir) async {
     final currentAlias = await SessionMetadata.getSessionAlias(sessionDir);
     final controller = TextEditingController(text: currentAlias);
-    
+
     if (!mounted) return;
     final newAlias = await showDialog<String>(
       context: context,
@@ -104,21 +107,21 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         ],
       ),
     );
-    
+
     if (newAlias != null && newAlias.isNotEmpty) {
       try {
         await SessionMetadata.setSessionAlias(sessionDir, newAlias);
         if (!mounted) return;
         setState(() {}); // Refresh the list
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Session name updated successfully')),
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update name: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update name: $e')));
       }
     }
   }
@@ -128,7 +131,9 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Session'),
-        content: const Text('Are you sure you want to delete this session? This action cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to delete this session? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -142,12 +147,12 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       try {
         await sessionDir.delete(recursive: true);
         await _loadSessions();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Session deleted successfully')),
@@ -155,9 +160,9 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
         }
       }
     }
@@ -175,22 +180,32 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
     if (await jsonFile.exists()) {
       final jsonContent = await jsonFile.readAsString();
       final List<dynamic> data = json.decode(jsonContent);
-      
+
       // Reconstruct paths based on current session directory
       final fixedCaptures = data.map((capture) {
         final captureMap = Map<String, dynamic>.from(capture);
-        
+
         // Extract just the filename from the stored paths
-        final imageFilename = captureMap['imagePath'].toString().split('/').last.split('\\').last;
-        final depthFilename = captureMap['depthPath'].toString().split('/').last.split('\\').last;
-        
+        final imageFilename = captureMap['imagePath']
+            .toString()
+            .split('/')
+            .last
+            .split('\\')
+            .last;
+        final depthFilename = captureMap['depthPath']
+            .toString()
+            .split('/')
+            .last
+            .split('\\')
+            .last;
+
         // Reconstruct full paths based on current session directory
         captureMap['imagePath'] = '${session.path}/$imageFilename';
         captureMap['depthPath'] = '${session.path}/$depthFilename';
-        
+
         return captureMap;
       }).toList();
-      
+
       setState(() {
         _captures = fixedCaptures;
       });
@@ -198,23 +213,19 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
   }
 
   Future<Uint8List> _runDepthEstimation(String imagePath) async {
-    if (_interpreter == null) {
-      throw Exception('Model not loaded');
-    }
+    if (_interpreter == null) throw Exception('Model not loaded');
 
-    // Load and preprocess image
     final imageFile = File(imagePath);
     final imageBytes = await imageFile.readAsBytes();
     final image = img.decodeImage(imageBytes);
-    
-    if (image == null) {
-      throw Exception('Failed to decode image');
-    }
+    if (image == null) throw Exception('Failed to decode image');
 
-    // Resize to model input size (256x256 for MiDaS Small)
     final resized = img.copyResize(image, width: 256, height: 256);
-    
-    // Convert to float32 and normalize to [0, 1]
+
+    // MiDaS ImageNet Normalization
+    final mean = [0.485, 0.456, 0.406];
+    final std = [0.229, 0.224, 0.225];
+
     final input = List.generate(
       1,
       (_) => List.generate(
@@ -223,15 +234,19 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
           256,
           (x) => List.generate(3, (c) {
             final pixel = resized.getPixel(x, y);
-            if (c == 0) return pixel.r / 255.0;
-            if (c == 1) return pixel.g / 255.0;
-            return pixel.b / 255.0;
+            double v =
+                (c == 0
+                    ? pixel.r
+                    : c == 1
+                    ? pixel.g
+                    : pixel.b) /
+                255.0;
+            return (v - mean[c]) / std[c];
           }),
         ),
       ),
     );
 
-    // Prepare output buffer [1, 256, 256, 1]
     final output = List.generate(
       1,
       (_) => List.generate(
@@ -239,93 +254,82 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         (_) => List.generate(256, (_) => List.filled(1, 0.0)),
       ),
     );
-
-    // Run inference
     _interpreter!.run(input, output);
 
-    // Post-process: normalize depth values to [0, 255] for visualization
-    // Extract values from [1, 256, 256, 1] to flat list
-    double minVal = output[0][0][0][0];
-    double maxVal = output[0][0][0][0];
-    
-    for (int y = 0; y < 256; y++) {
-      for (int x = 0; x < 256; x++) {
-        final val = output[0][y][x][0];
-        if (val < minVal) minVal = val;
-        if (val > maxVal) maxVal = val;
+    double minVal = output[0][0][0][0], maxVal = output[0][0][0][0];
+    for (var y = 0; y < 256; y++) {
+      for (var x = 0; x < 256; x++) {
+        final v = output[0][y][x][0];
+        if (v < minVal) minVal = v;
+        if (v > maxVal) maxVal = v;
       }
     }
 
-    final range = maxVal - minVal;
-    
-    // Create grayscale depth image at native 256x256 resolution
-    // Do NOT resize - preserving native MiDaS resolution prevents interpolation artifacts
+    final range = (maxVal - minVal).clamp(0.0001, double.infinity);
     final depthImage = img.Image(width: 256, height: 256);
     for (int y = 0; y < 256; y++) {
       for (int x = 0; x < 256; x++) {
-        final normalized = ((output[0][y][x][0] - minVal) / range * 255).toInt();
-        final pixel = img.ColorUint8.rgb(normalized, normalized, normalized);
-        depthImage.setPixel(x, y, pixel);
+        // Brighter = Closer (MiDaS standard)
+        final normalized = (((output[0][y][x][0] - minVal) / range) * 255)
+            .toInt();
+        depthImage.setPixel(
+          x,
+          y,
+          img.ColorUint8.rgb(normalized, normalized, normalized),
+        );
       }
     }
-    
     return Uint8List.fromList(img.encodePng(depthImage));
   }
 
   Future<void> _processCurrentImage() async {
     if (_captures.isEmpty || _currentIndex >= _captures.length) return;
-
     setState(() {
       _processing = true;
-      _statusMessage = 'Processing image ${_currentIndex + 1}/${_captures.length}...';
+      _statusMessage = 'Processing image...';
     });
 
     try {
       final capture = _captures[_currentIndex];
-      final imagePath = capture['imagePath'];
-      
-      final depthBytes = await _runDepthEstimation(imagePath);
-      
-      // Save enhanced depth map as binary file
-      final depthFilename = capture['depthPath'].split('/').last;
-      final frameNumber = depthFilename.replaceAll(RegExp(r'[^0-9]'), '');
-      final sessionDir = _selectedSession!.path;
-      final enhancedDepthPath = '$sessionDir/enhanced_depth_$frameNumber.raw';
-      
-      // Convert PNG back to 16-bit depth data for 3D viewer
-      // Depth is at native MiDaS resolution (256x256) - NOT resized
+      final depthBytes = await _runDepthEstimation(capture['imagePath']);
       final depthImage = img.decodeImage(depthBytes);
+
       if (depthImage != null) {
-        final depthWidth = depthImage.width;   // Should be 256
-        final depthHeight = depthImage.height; // Should be 256
-        
-        // MiDaS outputs inverse depth: brighter pixels = closer objects
-        // Save directly without inversion: higher uint16 = closer
+        final sessionDir = _selectedSession!.path;
+        final depthFilename = capture['depthPath'].split('/').last;
+        final frameNumber = depthFilename.replaceAll(RegExp(r'[^0-9]'), '');
+        final enhancedDepthPath = '$sessionDir/enhanced_depth_$frameNumber.raw';
+
+        final depthWidth = depthImage.width;
+        final depthHeight = depthImage.height;
         final depthData = Uint16List(depthWidth * depthHeight);
+
         for (int i = 0; i < depthData.length; i++) {
           final pixel = depthImage.getPixel(i % depthWidth, i ~/ depthWidth);
-          // Preserve MiDaS semantics: brightness (0-255) -> depth value (0-65535)
-          // Higher value = closer object
-          depthData[i] = (pixel.r.toInt() * 256);
+          // Brightness (0-255). 255 = Close, 0 = Far.
+          // Save as uint16 (0-65535). Large value = Closer.
+          depthData[i] = pixel.r.toInt() * 257;
         }
-        
-        // Save as binary file with header containing dimensions
-        // Format: [width:4 bytes][height:4 bytes][depth data:width*height*2 bytes]
-        final headerBuffer = ByteData(8);
-        headerBuffer.setUint32(0, depthWidth, Endian.little);
-        headerBuffer.setUint32(4, depthHeight, Endian.little);
-        
+
+        final header = ByteData(8)
+          ..setUint32(0, depthWidth, Endian.little)
+          ..setUint32(4, depthHeight, Endian.little);
+
         final file = File(enhancedDepthPath);
         final outputBytes = Uint8List(8 + depthData.length * 2);
-        outputBytes.setRange(0, 8, headerBuffer.buffer.asUint8List());
-        outputBytes.setRange(8, outputBytes.length, depthData.buffer.asUint8List());
+        outputBytes.setRange(0, 8, header.buffer.asUint8List());
+        outputBytes.setRange(
+          8,
+          outputBytes.length,
+          depthData.buffer.asUint8List(),
+        );
         await file.writeAsBytes(outputBytes);
       }
-      
+
       setState(() {
         _depthMapImage = depthBytes;
         _processing = false;
-        _statusMessage = 'Depth estimation complete for image ${_currentIndex + 1}\nSaved to: enhanced_depth_$frameNumber.raw';
+        _statusMessage = 'Saved enhanced depth.';
       });
     } catch (e) {
       setState(() {
@@ -385,7 +389,9 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Depth Estimation (${_currentIndex + 1}/${_captures.length})'),
+        title: Text(
+          'Depth Estimation (${_currentIndex + 1}/${_captures.length})',
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -425,7 +431,10 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
                         const SizedBox(height: 16),
                         const Text(
                           'Original Image',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Image.file(
@@ -436,13 +445,13 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
                         if (_depthMapImage != null) ...[
                           const Text(
                             'Depth Map (MiDaS)',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 8),
-                          Image.memory(
-                            _depthMapImage!,
-                            height: 300,
-                          ),
+                          Image.memory(_depthMapImage!, height: 300),
                           const SizedBox(height: 8),
                           const Text(
                             'Lighter = Closer, Darker = Farther',
@@ -476,7 +485,9 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.auto_awesome),
                         label: const Text('Estimate Depth'),

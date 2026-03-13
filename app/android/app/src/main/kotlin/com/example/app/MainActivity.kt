@@ -108,6 +108,7 @@ class NativeArView(private val context: Context, private val flutterEngine: Flut
                 shouldCapture = true
                 captureResult = result
                 val args = call.arguments as? Map<String, Any>
+
                 captureDir = args?.get("dirPath") as? String
             }
             else -> result.notImplemented()
