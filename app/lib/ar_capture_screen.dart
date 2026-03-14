@@ -143,49 +143,112 @@ class _ArCaptureScreenState extends State<ArCaptureScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('AR 3D Scanner')),
-      body: Stack(
-        children: [
-          // Native AR View
-          AndroidView(
-            viewType: viewType,
-            creationParams: const <String, dynamic>{},
-            creationParamsCodec: const StandardMessageCodec(),
-          ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Calculate square capture area (use screen width as the square size)
+          final screenWidth = constraints.maxWidth;
+          final screenHeight = constraints.maxHeight;
+          final squareSize = screenWidth; // 1:1 aspect ratio
+          final topOffset = (screenHeight - squareSize) / 2;
           
-          // UI Overlay
-          Positioned(
-            bottom: 30,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.black54,
-                  child: Text(
-                    _status,
-                    style: const TextStyle(color: Colors.white),
-                    textAlign: TextAlign.center,
+          return Stack(
+            children: [
+              // Native AR View
+              AndroidView(
+                viewType: viewType,
+                creationParams: const <String, dynamic>{},
+                creationParamsCodec: const StandardMessageCodec(),
+              ),
+              
+              // Darkened overlay for non-capture area (top)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: topOffset,
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                ),
+              ),
+              
+              // Darkened overlay for non-capture area (bottom)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: topOffset,
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                ),
+              ),
+              
+              // Square capture zone indicator
+              Positioned(
+                top: topOffset,
+                left: 0,
+                right: 0,
+                height: squareSize,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white, width: 2),
                   ),
                 ),
-                if (_imagePath != null)
-                  Padding(
-                    padding: const EdgeInsets.all(4.0),
-                    child: Text(
-                      'RGB: ...${_imagePath!.substring(_imagePath!.length - 20)}\nDepth: ...${_depthPath!.substring(_depthPath!.length - 20)}',
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+              
+              // Status and controls at top (safe from being covered)
+              Positioned(
+                top: 10,
+                left: 0,
+                right: 0,
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _status,
+                        style: const TextStyle(color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ),
-                if (_pose != null)
-                  Padding(
-                    padding: const EdgeInsets.all(4.0),
-                    child: Text(
-                      'Pose: ${_pose!.take(4).toList()}...',
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                    ),
-                  ),
-                const SizedBox(height: 20),
-                Row(
+                    if (_imagePath != null)
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          color: Colors.black54,
+                          child: Text(
+                            'RGB: ...${_imagePath!.substring(_imagePath!.length - 20)}\nDepth: ...${_depthPath!.substring(_depthPath!.length - 20)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ),
+                    if (_pose != null)
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          color: Colors.black54,
+                          child: Text(
+                            'Pose: ${_pose!.take(4).toList()}...',
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              
+              // Controls at bottom (within darkened area)
+              Positioned(
+                bottom: 10,
+                left: 0,
+                right: 0,
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     ElevatedButton(
@@ -198,15 +261,34 @@ class _ArCaptureScreenState extends State<ArCaptureScreen> {
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          
-          // Crosshair
-          const Center(
-            child: Icon(Icons.add, color: Colors.white, size: 40),
-          ),
-        ],
+              ),
+              
+              // Crosshair in center of square zone
+              Positioned(
+                top: topOffset + squareSize / 2 - 20,
+                left: screenWidth / 2 - 20,
+                child: const Icon(Icons.add, color: Colors.white, size: 40),
+              ),
+              
+              // 1:1 label
+              Positioned(
+                top: topOffset + 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '1:1',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

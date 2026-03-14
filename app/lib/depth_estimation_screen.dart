@@ -6,6 +6,7 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'dart:convert';
 import 'utils/session_metadata.dart';
+import 'utils/snackbar_helper.dart';
 
 class DepthEstimationScreen extends StatefulWidget {
   const DepthEstimationScreen({super.key});
@@ -111,14 +112,10 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         if (!mounted) return;
         setState(() {}); // Refresh the list
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session name updated successfully')),
-        );
+        showTopSuccessSnackBar(context, 'Session name updated successfully');
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update name: $e')),
-        );
+        showTopErrorSnackBar(context, 'Failed to update name: $e');
       }
     }
   }
@@ -149,15 +146,11 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         await _loadSessions();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Session deleted successfully')),
-          );
+          showTopSuccessSnackBar(context, 'Session deleted successfully');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e')),
-          );
+          showTopErrorSnackBar(context, 'Failed to delete: $e');
         }
       }
     }

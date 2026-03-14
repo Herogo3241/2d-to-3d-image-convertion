@@ -307,10 +307,23 @@ class NativeArView(private val context: Context, private val flutterEngine: Flut
         val correctedBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         correctedBitmap.setPixels(pixels, 0, width, 0, 0, width, height)
         
+        // Crop to center square (1:1 aspect ratio)
+        // Use width as the square size (same as Flutter UI calculation)
+        val squareSize = minOf(width, height)
+        val cropLeft = (width - squareSize) / 2
+        val cropTop = (height - squareSize) / 2
+        val croppedBitmap = Bitmap.createBitmap(correctedBitmap, cropLeft, cropTop, squareSize, squareSize)
+        
         val out = FileOutputStream(file)
-        correctedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+        croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
         out.flush()
         out.close()
+        
+        // Clean up bitmaps
+        if (croppedBitmap != correctedBitmap) {
+            correctedBitmap.recycle()
+        }
+        bitmap.recycle()
         
         return file.absolutePath
     }
