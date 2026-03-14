@@ -6,6 +6,7 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'dart:convert';
 import 'utils/session_metadata.dart';
+import 'utils/snackbar_helper.dart';
 
 class DepthEstimationScreen extends StatefulWidget {
   const DepthEstimationScreen({super.key});
@@ -154,9 +155,7 @@ class _DepthEstimationScreenState extends State<DepthEstimationScreen> {
         await _loadSessions();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Session deleted successfully')),
-          );
+          showTopSuccessSnackBar(context, 'Session deleted successfully');
         }
       } catch (e) {
         if (mounted) {

@@ -348,9 +348,40 @@ class _ArCaptureScreenState extends State<ArCaptureScreen> {
                       style:
                           const TextStyle(color: Colors.white, fontSize: 10),
                     ),
-                  ),
-                const SizedBox(height: 20),
-                Row(
+                    if (_imagePath != null)
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          color: Colors.black54,
+                          child: Text(
+                            'RGB: ...${_imagePath!.substring(_imagePath!.length - 20)}\nDepth: ...${_depthPath!.substring(_depthPath!.length - 20)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ),
+                    if (_pose != null)
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          color: Colors.black54,
+                          child: Text(
+                            'Pose: ${_pose!.take(4).toList()}...',
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              
+              // Controls at bottom (within darkened area)
+              Positioned(
+                bottom: 10,
+                left: 0,
+                right: 0,
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     ElevatedButton(
