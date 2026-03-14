@@ -3,6 +3,7 @@ import 'modules/ar_capture/ar_capture_module.dart';
 import 'modules/depth_estimation/depth_estimation_module.dart';
 import 'modules/3d_viewer/3d_viewer_module.dart';
 import 'gallery_screen.dart';
+import 'multi_view_fusion_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -82,18 +83,29 @@ class HomeScreen extends StatelessWidget {
                   ),
                   _buildModuleCard(
                     context,
+                    title: 'Multi-View Fusion',
+                    description: 'Stitch multi-view captures into one 3D model',
+                    icon: Icons.merge_type,
+                    color: Colors.teal,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const MultiViewFusionScreen(),
+                      ),
+                    ),
+                  ),
+                  _buildModuleCard(
+                    context,
                     title: 'Gallery',
                     description: 'Browse captured sessions',
                     icon: Icons.photo_library,
                     color: Colors.purple,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const GalleryScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const GalleryScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -153,7 +165,8 @@ class HomeScreen extends StatelessWidget {
                 if (!isEnabled) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade100,
                       borderRadius: BorderRadius.circular(12),
@@ -176,4 +189,3 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-

@@ -9,6 +9,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter_cube/flutter_cube.dart' as cube;
 import 'package:vector_math/vector_math_64.dart' as vm;
 import 'utils/session_metadata.dart';
+import 'utils/point_cloud_fusion.dart'; // ← Point3D lives here now
+import 'package:image_background_remover/image_background_remover.dart';
+
+// Point3D is imported from utils/point_cloud_fusion.dart — do NOT redefine here.
 import 'utils/mesh_generator.dart';
 import 'utils/snackbar_helper.dart';
 
@@ -82,7 +86,13 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
   @override
   void initState() {
     super.initState();
+    BackgroundRemover.instance.initializeOrt();
     _loadSessions();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   Future<void> _loadSessions() async {
@@ -101,7 +111,7 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
   Future<void> _renameSession(Directory sessionDir) async {
     final currentAlias = await SessionMetadata.getSessionAlias(sessionDir);
     final controller = TextEditingController(text: currentAlias);
-    
+
     if (!mounted) return;
     final newAlias = await showDialog<String>(
       context: context,
@@ -138,17 +148,19 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         ],
       ),
     );
-    
+
     if (newAlias != null && newAlias.isNotEmpty) {
       try {
         await SessionMetadata.setSessionAlias(sessionDir, newAlias);
         if (!mounted) return;
-        setState(() {}); // Refresh the list
-        
-        showTopSuccessSnackBar(context, 'Session name updated successfully');
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session name updated successfully')),
+        );
       } catch (e) {
         if (!mounted) return;
-        showTopErrorSnackBar(context, 'Failed to update name: $e');
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to update name: $e')));
       }
     }
   }
@@ -159,7 +171,9 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Session'),
-        content: const Text('Are you sure you want to delete this session? This action cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to delete this session? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -173,21 +187,76 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       try {
         await sessionDir.delete(recursive: true);
         await _loadSessions();
-        
         if (mounted) {
           showTopSuccessSnackBar(context, 'Session deleted successfully');
         }
       } catch (e) {
         if (mounted) {
-          showTopErrorSnackBar(context, 'Failed to delete: $e');
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
         }
       }
     }
+  }
+
+  Uint16List _smoothDepthMap(
+    Uint16List depthData,
+    int width,
+    int height, {
+    int kernelSize = 5,
+  }) {
+    final smoothed = Uint16List(depthData.length);
+    final radius = kernelSize ~/ 2;
+    final kernel = <int>[];
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        kernel.clear();
+        for (int dy = -radius; dy <= radius; dy++) {
+          for (int dx = -radius; dx <= radius; dx++) {
+            final ny = y + dy;
+            final nx = x + dx;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              final idx = ny * width + nx;
+              if (depthData[idx] > 0) kernel.add(depthData[idx]);
+            }
+          }
+        }
+        if (kernel.isNotEmpty) {
+          kernel.sort();
+          smoothed[y * width + x] = kernel[kernel.length ~/ 2];
+        } else {
+          smoothed[y * width + x] = depthData[y * width + x];
+        }
+      }
+    }
+    return smoothed;
+  }
+
+  List<Point3D> _filterIsolatedPoints(
+    List<Point3D> points, {
+    double maxNeighborDistance = 0.15,
+    int minNeighbors = 3,
+  }) {
+    if (points.isEmpty) return points;
+    final filtered = <Point3D>[];
+    for (int i = 0; i < points.length; i++) {
+      final point = points[i];
+      int neighborCount = 0;
+      for (int j = 0; j < points.length; j++) {
+        if (i == j) continue;
+        if (point.distanceTo(points[j]) <= maxNeighborDistance) {
+          neighborCount++;
+        }
+      }
+      if (neighborCount >= minNeighbors) filtered.add(point);
+    }
+    return filtered;
   }
 
   Future<void> _loadCapturesFromSession(Directory session) async {
@@ -202,22 +271,26 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
     if (await jsonFile.exists()) {
       final jsonContent = await jsonFile.readAsString();
       final List<dynamic> data = json.decode(jsonContent);
-      
-      // Reconstruct paths based on current session directory
+
       final fixedCaptures = data.map((capture) {
         final captureMap = Map<String, dynamic>.from(capture);
-        
-        // Extract just the filename from the stored paths
-        final imageFilename = captureMap['imagePath'].toString().split('/').last.split('\\').last;
-        final depthFilename = captureMap['depthPath'].toString().split('/').last.split('\\').last;
-        
-        // Reconstruct full paths based on current session directory
+        final imageFilename = captureMap['imagePath']
+            .toString()
+            .split('/')
+            .last
+            .split('\\')
+            .last;
+        final depthFilename = captureMap['depthPath']
+            .toString()
+            .split('/')
+            .last
+            .split('\\')
+            .last;
         captureMap['imagePath'] = '${session.path}/$imageFilename';
         captureMap['depthPath'] = '${session.path}/$depthFilename';
-        
         return captureMap;
       }).toList();
-      
+
       setState(() {
         _captures = fixedCaptures;
       });
@@ -231,13 +304,12 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
     final imagePath = capture['imagePath'];
     final depthPath = capture['depthPath'];
 
-    // Check if MiDaS depth exists when requested
     if (_useMidasDepth) {
       final sessionDir = _selectedSession!.path;
       final depthFilename = depthPath.split('/').last;
       final frameNumber = depthFilename.replaceAll(RegExp(r'[^0-9]'), '');
       final midasDepthPath = '$sessionDir/enhanced_depth_$frameNumber.raw';
-      
+
       if (!await File(midasDepthPath).exists()) {
         if (!mounted) return;
         showDialog(
@@ -245,9 +317,8 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
           builder: (context) => AlertDialog(
             title: const Text('MiDaS Depth Not Available'),
             content: const Text(
-              'MiDaS depth map has not been generated for this image.\\n\\n'
-              'Please go to Depth Estimation screen and process this image first, '
-              'then return here to generate the 3D point cloud.',
+              'MiDaS depth map has not been generated for this image.\n\n'
+              'Please go to Depth Estimation screen and process this image first.',
             ),
             actions: [
               TextButton(
@@ -270,101 +341,60 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
     });
 
     try {
-      
       double minDepth = double.infinity;
       double maxDepth = 0.0;
 
-      // Check if MiDaS enhanced depth exists
       final sessionDir = _selectedSession!.path;
       final depthFilename = depthPath.split('/').last;
       final frameNumber = depthFilename.replaceAll(RegExp(r'[^0-9]'), '');
       final midasDepthPath = '$sessionDir/enhanced_depth_$frameNumber.raw';
-      
+
       String actualDepthPath = depthPath;
       bool usingMidas = false;
-      
+
       if (_useMidasDepth && await File(midasDepthPath).exists()) {
         actualDepthPath = midasDepthPath;
         usingMidas = true;
       }
 
-      // Load RGB image
       final imageBytes = await File(imagePath).readAsBytes();
       final rgbImage = img.decodeImage(imageBytes);
-      
-      if (rgbImage == null) {
-        throw Exception('Failed to decode RGB image');
-      }
+      if (rgbImage == null) throw Exception('Failed to decode RGB image');
 
-      // Load depth data
       Uint16List depthData;
-      int depthWidth = 256;  // Default for MiDaS
+      int depthWidth = 256;
       int depthHeight = 256;
-      
+
       if (usingMidas) {
-        // MiDaS depth - read dimensions from file header
-        // Format: [width:4 bytes][height:4 bytes][depth data:width*height*2 bytes]
         final depthBytes = await File(actualDepthPath).readAsBytes();
-        
-        // Check if file has header (new format) or is legacy (no header)
-        // New format has header, legacy format was assumed 256x256
         if (depthBytes.length > 8) {
           final header = ByteData.sublistView(depthBytes, 0, 8);
           final headerWidth = header.getUint32(0, Endian.little);
           final headerHeight = header.getUint32(4, Endian.little);
-          
-          // Validate header - if dimensions make sense with file size, use them
           final expectedSize = 8 + headerWidth * headerHeight * 2;
-          if (headerWidth > 0 && headerWidth <= 4096 && 
-              headerHeight > 0 && headerHeight <= 4096 &&
+          if (headerWidth > 0 &&
+              headerWidth <= 4096 &&
+              headerHeight > 0 &&
+              headerHeight <= 4096 &&
               depthBytes.length == expectedSize) {
-            // New format with header
             depthWidth = headerWidth;
             depthHeight = headerHeight;
-            depthData = depthBytes.buffer.asUint16List(8); // Skip 8-byte header
+            depthData = depthBytes.buffer.asUint16List(8);
           } else {
-            // Legacy format without header - try to infer dimensions
-            // Legacy files might have been saved at resized resolution
             final totalPixels = depthBytes.length ~/ 2;
             depthData = depthBytes.buffer.asUint16List();
-            
-            // Check for common resolutions
             if (totalPixels == 256 * 256) {
-              depthWidth = 256;
-              depthHeight = 256;
+              depthWidth = depthHeight = 256;
             } else {
-              // Try to find valid dimensions (assume roughly square aspect)
               final sqrtVal = math.sqrt(totalPixels).round();
-              if (sqrtVal * sqrtVal == totalPixels) {
-                depthWidth = sqrtVal;
-                depthHeight = sqrtVal;
-              } else {
-                // Try common aspect ratios (16:9, 4:3)
-                bool found = false;
-                for (final ratio in [(16, 9), (4, 3), (3, 2)]) {
-                  final w = math.sqrt(totalPixels * ratio.$1 / ratio.$2).round();
-                  final h = (w * ratio.$2 / ratio.$1).round();
-                  if (w * h == totalPixels) {
-                    depthWidth = w;
-                    depthHeight = h;
-                    found = true;
-                    break;
-                  }
-                }
-                // Fallback to 256x256 if nothing matches
-                if (!found) {
-                  depthWidth = 256;
-                  depthHeight = 256;
-                }
-              }
+              depthWidth = depthHeight =
+                  (sqrtVal * sqrtVal == totalPixels) ? sqrtVal : 256;
             }
           }
         } else {
-          // Very small file - shouldn't happen
           throw Exception('Invalid depth file format');
         }
       } else {
-        // ARCore depth (160x90)
         final depthBytes = await File(actualDepthPath).readAsBytes();
         depthData = depthBytes.buffer.asUint16List();
         depthWidth = 160;
@@ -372,8 +402,7 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
       }
 
       final points = <Point3D>[];
-      
-      // Find depth range for normalization
+
       if (usingMidas) {
         for (int i = 0; i < depthData.length; i++) {
           if (depthData[i] > 0) {
@@ -383,24 +412,21 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
           }
         }
       }
-      
-      // Camera intrinsics (adjust FOV for more accurate projection)
-      // Using ~60 degree horizontal FOV (typical mobile camera)
-      final fovH = 60.0 * math.pi / 180.0; // radians
+
+      final fovH = 60.0 * math.pi / 180.0;
       final fx = depthWidth / (2.0 * math.tan(fovH / 2.0));
-      final fy = fx; // Assume square pixels
+      final fy = fx;
       final cx = depthWidth / 2.0;
       final cy = depthHeight / 2.0;
 
-      // Downsample for performance (every Nth pixel)
+      depthData = _smoothDepthMap(depthData, depthWidth, depthHeight);
+
       final step = usingMidas ? 2 : 1;
 
-      // Generate point cloud
       for (int y = 0; y < depthHeight; y += step) {
         for (int x = 0; x < depthWidth; x += step) {
           final depthIndex = y * depthWidth + x;
           if (depthIndex >= depthData.length) continue;
-
           final depthValue = depthData[depthIndex];
           // For ARCore, 0 means invalid depth. For MiDaS, 0 is just the farthest point.
           if (depthValue == 0 && !usingMidas) continue;
@@ -415,22 +441,20 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
             // Maps brightest points (1.0) -> 3.0m (far), darkest points (0.0) -> 0.5m (close)
             z = 0.5 + (normalizedDepth * 2.5); 
           } else {
-            // ARCore: already in millimeters
             z = depthValue / 1000.0;
           }
-          
-          // Skip if depth is too far or too close
           if (z < 0.1 || z > 5.0) continue;
 
-          // Back-project to 3D using proper camera model
           final xPos = (x - cx) * z / fx;
           final yPos = (y - cy) * z / fy;
 
-          // Get RGB color - match depth pixel to RGB pixel
           final imgX = (x * rgbImage.width / depthWidth).floor();
           final imgY = (y * rgbImage.height / depthHeight).floor();
-          
-          if (imgX >= 0 && imgX < rgbImage.width && imgY >= 0 && imgY < rgbImage.height) {
+
+          if (imgX >= 0 &&
+              imgX < rgbImage.width &&
+              imgY >= 0 &&
+              imgY < rgbImage.height) {
             final pixel = rgbImage.getPixel(imgX, imgY);
             points.add(Point3D(
               x: xPos,
@@ -446,6 +470,12 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         }
       }
 
+      final filteredPoints = _filterIsolatedPoints(
+        points,
+        maxNeighborDistance: 0.12,
+        minNeighbors: 2,
+      );
+
       setState(() {
         _pointCloud = points;
         _mesh = null; // Reset mesh when regenerating point cloud
@@ -455,7 +485,12 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
         final depthInfo = usingMidas && minDepth != double.infinity 
             ? ' | Range: ${(minDepth/256/1000).toStringAsFixed(2)}-${(maxDepth/256/1000).toStringAsFixed(2)}m'
             : '';
-        _statusMessage = '${points.length} points | ${usingMidas ? "MiDaS" : "ARCore"} depth$depthInfo';
+        final reduction = points.isNotEmpty
+            ? ((1 - filteredPoints.length / points.length) * 100)
+                .toStringAsFixed(1)
+            : '0';
+        _statusMessage =
+            '${filteredPoints.length} points (filtered $reduction%) | ${usingMidas ? "MiDaS" : "ARCore"} depth$depthInfo';
       });
     } catch (e) {
       setState(() {
@@ -616,7 +651,8 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('3D Viewer (${_currentIndex + 1}/${_captures.length})'),
+        title:
+            Text('3D Viewer (${_currentIndex + 1}/${_captures.length})'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -639,7 +675,8 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.view_in_ar, size: 64, color: Colors.grey),
+                              const Icon(Icons.view_in_ar,
+                                  size: 64, color: Colors.grey),
                               const SizedBox(height: 16),
                               const Text('No point cloud generated'),
                               const SizedBox(height: 16),
@@ -648,7 +685,8 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                                 icon: const Icon(Icons.play_arrow),
                                 label: const Text('Generate Point Cloud'),
                                 style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 12),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -671,10 +709,9 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                               if (_statusMessage != null)
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
-                                  child: Text(
-                                    _statusMessage!,
-                                    style: const TextStyle(color: Colors.grey),
-                                  ),
+                                  child: Text(_statusMessage!,
+                                      style:
+                                          const TextStyle(color: Colors.grey)),
                                 ),
                             ],
                           ),
@@ -703,18 +740,15 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                           onScaleUpdate: (details) {
                             setState(() {
                               if (details.scale != 1.0) {
-                                // Pinch to zoom
                                 _zoom *= details.scale;
                                 _zoom = _zoom.clamp(0.1, 10.0);
                               }
-                              
-                              // Single finger drag for rotation, two-finger drag for pan
                               if (details.pointerCount == 1) {
-                                // Rotation with single finger
-                                _rotationY += details.focalPointDelta.dx * 0.01;
-                                _rotationX += details.focalPointDelta.dy * 0.01;
+                                _rotationY +=
+                                    details.focalPointDelta.dx * 0.01;
+                                _rotationX +=
+                                    details.focalPointDelta.dy * 0.01;
                               } else if (details.pointerCount == 2) {
-                                // Pan with two fingers
                                 _panX += details.focalPointDelta.dx / 100;
                                 _panY += details.focalPointDelta.dy / 100;
                               }
@@ -746,12 +780,14 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                           color: Colors.black87,
                           child: Text(
                             _statusMessage!,
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12),
                             textAlign: TextAlign.center,
                           ),
                         ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         color: Colors.black54,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -759,16 +795,20 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                             Column(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.add, color: Colors.white),
+                                  icon: const Icon(Icons.add,
+                                      color: Colors.white),
                                   onPressed: () {
                                     setState(() {
                                       _zoom = (_zoom * 1.2).clamp(0.1, 10.0);
                                     });
                                   },
                                 ),
-                                const Text('Zoom', style: TextStyle(color: Colors.white, fontSize: 10)),
+                                const Text('Zoom',
+                                    style: TextStyle(
+                                        color: Colors.white, fontSize: 10)),
                                 IconButton(
-                                  icon: const Icon(Icons.remove, color: Colors.white),
+                                  icon: const Icon(Icons.remove,
+                                      color: Colors.white),
                                   onPressed: () {
                                     setState(() {
                                       _zoom = (_zoom / 1.2).clamp(0.1, 10.0);
@@ -779,7 +819,9 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                             ),
                             Column(
                               children: [
-                                const Text('Drag to rotate', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                const Text('Drag to rotate',
+                                    style: TextStyle(
+                                        color: Colors.white, fontSize: 12)),
                                 const SizedBox(height: 4),
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.refresh, size: 16),
@@ -796,7 +838,8 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
                                     });
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                   ),
                                 ),
                               ],
@@ -908,24 +951,9 @@ class _PointCloudViewerScreenState extends State<PointCloudViewerScreen> {
   }
 }
 
-class Point3D {
-  final double x, y, z;
-  final int r, g, b;
-  final int gridX;
-  final int gridY;
-
-  Point3D({
-    required this.x,
-    required this.y,
-    required this.z,
-    required this.r,
-    required this.g,
-    required this.b,
-    this.gridX = 0,
-    this.gridY = 0,
-  });
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// PointCloudPainter — shared by PointCloudViewerScreen and MultiViewFusionScreen
+// ─────────────────────────────────────────────────────────────────────────────
 class PointCloudPainter extends CustomPainter {
   final List<Point3D> points;
   final double rotationX;
@@ -949,87 +977,70 @@ class PointCloudPainter extends CustomPainter {
     final centerY = size.height / 2 + offsetY;
     final scale = math.min(size.width, size.height) * 0.3 * zoom;
 
-    // Draw background
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, size.height),
       Paint()..color = Colors.black,
     );
 
-    // Sort points by depth for correct rendering
     final sortedPoints = List<Point3D>.from(points);
-    sortedPoints.sort((a, b) {
-      final aZ = _rotateZ(a);
-      final bZ = _rotateZ(b);
-      return aZ.compareTo(bZ);
-    });
+    sortedPoints.sort((a, b) => _rotateZ(a).compareTo(_rotateZ(b)));
 
-    // Draw points with larger size for better visibility
     for (final point in sortedPoints) {
-      // Apply rotation
       final rotated = _rotate3D(point);
-
-      // Project to 2D
       final screenX = centerX + rotated.x * scale;
       final screenY = centerY - rotated.y * scale;
 
-      // Skip points outside screen
-      if (screenX < 0 || screenX > size.width || screenY < 0 || screenY > size.height) {
-        continue;
-      }
+      if (screenX < 0 ||
+          screenX > size.width ||
+          screenY < 0 ||
+          screenY > size.height) continue;
 
-      // Calculate point size based on depth (closer = larger)
       final pointSize = math.max(1.5, 3.0 / (1.0 + rotated.z.abs()));
-
-      // Draw point with slight glow effect
-      final paint = Paint()
-        ..color = Color.fromRGBO(point.r, point.g, point.b, 1.0)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawCircle(Offset(screenX, screenY), pointSize, paint);
+      canvas.drawCircle(
+        Offset(screenX, screenY),
+        pointSize,
+        Paint()
+          ..color = Color.fromRGBO(point.r, point.g, point.b, 1.0)
+          ..style = PaintingStyle.fill,
+      );
     }
 
-    // Draw coordinate axes for reference
     _drawAxes(canvas, centerX, centerY, scale);
   }
 
   void _drawAxes(Canvas canvas, double centerX, double centerY, double scale) {
     const axisLength = 0.2;
-    
-    // X axis (red)
-    final xEnd = _rotate3D(Point3D(x: axisLength, y: 0, z: 0, r: 255, g: 0, b: 0));
-    canvas.drawLine(
-      Offset(centerX, centerY),
-      Offset(centerX + xEnd.x * scale, centerY - xEnd.y * scale),
-      Paint()..color = Colors.red..strokeWidth = 2,
-    );
-    
-    // Y axis (green)
-    final yEnd = _rotate3D(Point3D(x: 0, y: axisLength, z: 0, r: 0, g: 255, b: 0));
-    canvas.drawLine(
-      Offset(centerX, centerY),
-      Offset(centerX + yEnd.x * scale, centerY - yEnd.y * scale),
-      Paint()..color = Colors.green..strokeWidth = 2,
-    );
-    
-    // Z axis (blue)
-    final zEnd = _rotate3D(Point3D(x: 0, y: 0, z: axisLength, r: 0, g: 0, b: 255));
-    canvas.drawLine(
-      Offset(centerX, centerY),
-      Offset(centerX + zEnd.x * scale, centerY - zEnd.y * scale),
-      Paint()..color = Colors.blue..strokeWidth = 2,
-    );
+    final xEnd = _rotate3D(
+        Point3D(x: axisLength, y: 0, z: 0, r: 255, g: 0, b: 0));
+    canvas.drawLine(Offset(centerX, centerY),
+        Offset(centerX + xEnd.x * scale, centerY - xEnd.y * scale),
+        Paint()
+          ..color = Colors.red
+          ..strokeWidth = 2);
+
+    final yEnd = _rotate3D(
+        Point3D(x: 0, y: axisLength, z: 0, r: 0, g: 255, b: 0));
+    canvas.drawLine(Offset(centerX, centerY),
+        Offset(centerX + yEnd.x * scale, centerY - yEnd.y * scale),
+        Paint()
+          ..color = Colors.green
+          ..strokeWidth = 2);
+
+    final zEnd = _rotate3D(
+        Point3D(x: 0, y: 0, z: axisLength, r: 0, g: 0, b: 255));
+    canvas.drawLine(Offset(centerX, centerY),
+        Offset(centerX + zEnd.x * scale, centerY - zEnd.y * scale),
+        Paint()
+          ..color = Colors.blue
+          ..strokeWidth = 2);
   }
 
   Point3D _rotate3D(Point3D point) {
-    // Rotate around X axis
-    final cosX = math.cos(rotationX);
-    final sinX = math.sin(rotationX);
+    final cosX = math.cos(rotationX), sinX = math.sin(rotationX);
     final y1 = point.y * cosX - point.z * sinX;
     final z1 = point.y * sinX + point.z * cosX;
 
-    // Rotate around Y axis
-    final cosY = math.cos(rotationY);
-    final sinY = math.sin(rotationY);
+    final cosY = math.cos(rotationY), sinY = math.sin(rotationY);
     final x2 = point.x * cosY + z1 * sinY;
     final z2 = -point.x * sinY + z1 * cosY;
 
@@ -1037,15 +1048,8 @@ class PointCloudPainter extends CustomPainter {
   }
 
   double _rotateZ(Point3D point) {
-    final cosX = math.cos(rotationX);
-    final sinX = math.sin(rotationX);
-    final z1 = point.y * sinX + point.z * cosX;
-
-    final cosY = math.cos(rotationY);
-    final sinY = math.sin(rotationY);
-    final z2 = -point.x * sinY + z1 * cosY;
-
-    return z2;
+    final z1 = point.y * math.sin(rotationX) + point.z * math.cos(rotationX);
+    return -point.x * math.sin(rotationY) + z1 * math.cos(rotationY);
   }
 
   @override
