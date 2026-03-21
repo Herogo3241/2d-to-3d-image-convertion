@@ -1,0 +1,37 @@
+\oddsidemargin 1.48cm
+\evensidemargin .5cm
+\textwidth 14cm 
+\topsep 0in
+\parsep 3ex
+\headsep 1cm
+\textheight 18cm
+\itemsep .2cm
+\parindent .5cm 
+\parskip 2mm
+%\hsize 6in 
+\sloppy
+\renewcommand{\footnotesep}{3.5mm}
+\newcounter{example}[chapter]
+\newcommand{\theexam}{\arabic{chapter}.\arabic{example}}
+\newenvironment{exam}{\stepcounter{example}{\bf Example \theexam}}
+
+\renewcommand{\baselinestretch}{1.4} %%%%%%% JSS added for line spaceing
+% These allow switching interline spacing; the change takes effect 
+%immediately:
+%\newcommand{\singlespacing}{\let\CS=\@currsize\renewcommand{\baselinestretch}{1}\tiny\CS}
+%\newcommand{\onetwospacing}{\let\CS=\@currsize\renewcommand{\baselinestretch}{1.25}\tiny\CS}
+%\newcommand{\doublespacing}{\let\CS=\@currsize\renewcommand{\baselinestretch}{1.5}\tiny\CS}
+\newcommand {\tab} {\hspace{2em}}
+\newcommand {\lab} {\hspace{1em}}
+\newcommand {\labb} {\hspace{1em}}
+\newcommand{\beq}{\begin{equation}}
+\newcommand{\eeq}{\end{equation}}
+\newcommand{\bdes}{\begin{description}}
+\newcommand{\edes}{\end{description}}
+\newtheorem{theorem}{Theorem}[chapter]
+\setlength{\jot}{6pt}
+\newcounter{remark}[chapter]
+\newcommand{\therem}{\arabic{chapter}.\arabic{remark}}
+\newenvironment{remark}{\stepcounter{remark}{\bf Remark \therem}}
+
+

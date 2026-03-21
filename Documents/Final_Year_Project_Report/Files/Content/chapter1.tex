@@ -1,0 +1,35 @@
+\chapter{Introduction}
+
+Three-dimensional (3D) reconstruction from two-dimensional (2D) images has become a significant area of research in computer vision due to its wide range of practical applications. Technologies such as augmented reality, virtual reality, robotics, and digital modeling increasingly depend on accurate 3D representations of real-world objects. With the growing availability of smartphones, there is a strong interest in making such capabilities accessible directly on mobile devices.
+
+Despite these advancements, most existing 3D reconstruction systems rely on cloud-based processing or high-performance computing resources. These approaches require continuous internet connectivity and powerful hardware, which limits their usability in real-world scenarios, especially in mobile and resource-constrained environments. Moreover, transmitting image data to external servers introduces concerns related to privacy, latency, and operational cost. \\ \\
+
+To overcome these limitations, this project focuses on developing a fully offline 2D-to-3D reconstruction system specifically designed for ARM-based mobile devices. The system aims to enable users to capture images using a smartphone and generate a 3D model directly on the device without any dependency on cloud services. This makes the solution more portable, efficient, and privacy-preserving.
+
+The proposed system integrates lightweight deep learning models with efficient geometric processing techniques. It captures one or more images using the mobile camera, estimates depth information through an on-device neural network, determines camera poses using feature matching, and combines multiple depth maps into a unified 3D representation. The final output is a reconstructed 3D model that can be visualized in real time on the mobile device. \\ \\
+
+By eliminating the need for external computation, the system reduces latency and improves reliability in offline conditions. This approach opens up new possibilities for applications such as mobile 3D scanning, architectural visualization, digital content creation, and offline augmented reality experiences. Overall, the project demonstrates that efficient and practical 3D reconstruction can be achieved on low-power mobile hardware through careful system design and optimization.
+
+
+
+In recent years, the field of computer vision has witnessed rapid progress due to the integration of deep learning techniques. Neural networks have significantly improved the ability to extract meaningful information from images, enabling tasks such as object detection, segmentation, and depth estimation. Among these, depth estimation plays a crucial role in understanding the spatial structure of a scene, which is essential for 3D reconstruction.
+
+However, achieving accurate depth estimation on mobile devices remains a challenging task. Mobile processors have limited computational power and memory compared to desktop GPUs. Therefore, models must be carefully optimized to ensure efficient execution without compromising too much on accuracy. Techniques such as model quantization, pruning, and the use of lightweight architectures are commonly employed to address these challenges.
+
+Another important aspect of 3D reconstruction is camera pose estimation. Accurately determining the position and orientation of the camera for each captured frame is essential for aligning multiple images into a consistent 3D structure. Feature-based methods are commonly used for this purpose, where distinctive points in images are detected and matched across frames. These correspondences are then used to estimate the relative motion between frames.
+
+Depth fusion is the process of combining multiple depth maps into a single coherent representation. This step is critical in reducing noise and improving the overall quality of the reconstructed model. Efficient fusion techniques are required to ensure that the system can operate in real time on mobile devices. Following fusion, surface reconstruction algorithms are used to generate a mesh that represents the geometry of the scene.
+
+The importance of mobile-based 3D reconstruction extends beyond academic research. In practical scenarios, users often require quick and portable solutions that do not depend on external infrastructure. For example, in construction and architecture, on-site 3D scanning can help in measuring spaces and visualizing designs. In healthcare, 3D models can assist in diagnostics and treatment planning. Similarly, in education and entertainment, interactive 3D content enhances user engagement.
+
+Privacy is another critical factor that motivates the development of offline systems. Many existing solutions require uploading images to cloud servers, which may expose sensitive information. By performing all computations locally on the device, the proposed system ensures that user data remains secure and under the user's control.
+
+Furthermore, the advancement of mobile hardware, including improved CPUs, GPUs, and dedicated AI accelerators, has made it increasingly feasible to run complex algorithms directly on smartphones. This trend supports the development of applications that were previously limited to high-performance computing environments.
+
+In addition to technical challenges, usability is also an important consideration. The system should provide an intuitive interface that allows users to easily capture images and visualize results. Efficient memory management and optimized processing pipelines are necessary to ensure smooth performance without excessive battery consumption.
+
+The proposed project aims to bridge the gap between high-quality reconstruction systems and the limitations of mobile devices. By carefully combining modern machine learning techniques with efficient algorithm design, it is possible to achieve a balance between accuracy, speed, and resource usage.
+
+In conclusion, this project contributes to the growing field of mobile computer vision by demonstrating that 3D reconstruction can be performed effectively in a fully offline environment. It highlights the potential of mobile devices as powerful tools for real-world applications and paves the way for future advancements in portable 3D scanning technologies.
+
+% Example for using abbreviations and nomenclature (keep if required)

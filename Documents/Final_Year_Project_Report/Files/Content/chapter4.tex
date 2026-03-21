@@ -1,0 +1,27 @@
+\chapter{Design and Implementation}
+
+% Chapter Introduction
+This chapter presents the overall design and implementation details of the proposed offline 2D-to-3D reconstruction system. The system is designed to operate efficiently on ARM-based mobile devices by integrating lightweight machine learning models with optimized geometric processing techniques. A modular architecture is adopted to ensure scalability, maintainability, and ease of development.
+
+The implementation focuses on capturing image data, processing it through multiple stages, and generating a 3D model directly on the mobile device. Each component of the system is carefully designed to balance performance and accuracy while operating under the constraints of limited computational resources. \\ \\
+
+% Section 1
+\section{System Architecture}
+
+The system follows a modular architecture where each major functionality is implemented as an independent module. The key modules of the system include image capture, depth estimation, 3D reconstruction, and visualization.
+
+The image capture module utilizes the mobile device camera and AR capabilities to acquire RGB images along with depth information and camera pose. The depth estimation module enhances the captured data using lightweight neural networks deployed through TensorFlow Lite. The reconstruction module processes the depth maps and camera poses to generate a unified 3D representation. Finally, the visualization module renders the reconstructed model for user interaction.
+
+This modular design allows individual components to be developed and tested independently while ensuring smooth integration into the complete system. \\ \\
+
+% Section 2
+\section{Implementation Details}
+
+The system is implemented as a mobile application using Flutter for the user interface and native Android components for AR functionalities. ARCore is used to capture real-time camera data, including depth information and pose estimation. The captured data is stored locally on the device in an organized format for further processing.
+
+Depth estimation is performed using optimized machine learning models converted to TensorFlow Lite format, enabling efficient on-device inference. The reconstruction process involves aligning depth maps using camera pose information, followed by depth fusion to generate a consistent 3D structure.
+
+The final stage involves mesh generation and visualization. Point cloud data is processed to create a surface mesh, which is then rendered using lightweight 3D visualization libraries. The application also includes features for managing captured sessions and exporting data for further use.
+
+% Conclusion
+Overall, the design and implementation focus on achieving a balance between efficiency and functionality. By combining mobile-friendly technologies with optimized algorithms, the system successfully demonstrates the feasibility of performing 3D reconstruction entirely on a mobile device without external computation.

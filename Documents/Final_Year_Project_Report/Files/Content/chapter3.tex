@@ -1,0 +1,57 @@
+\chapter{Problem Statement and Objectives}
+
+% Chapter Introduction
+With the increasing demand for 3D content in applications such as augmented reality, robotics, and digital modeling, there is a growing need for efficient methods to reconstruct 3D structures from 2D images. While many solutions exist, most of them are designed for high-performance systems and are not suitable for mobile or offline environments.
+
+Mobile devices, especially those based on ARM architectures, have limited computational power compared to desktops or cloud servers. Therefore, developing a system that can perform accurate 3D reconstruction directly on such devices presents several challenges. This chapter outlines the key problem addressed in this project and the objectives defined to solve it. \\ \\
+
+In addition, the rapid growth of mobile applications has created a demand for intelligent systems that can process visual data locally. Users increasingly expect applications to function seamlessly without relying on network connectivity. This shift towards edge computing highlights the importance of designing algorithms that are both efficient and capable of running on resource-constrained devices. \\ \\
+
+% Section 1
+\section{Problem Statement}
+
+Most existing 2D-to-3D reconstruction systems depend on cloud computing or high-end hardware to achieve acceptable levels of accuracy and performance. These systems require continuous internet connectivity and access to powerful GPUs, which limits their usability in real-world scenarios.
+
+Such approaches introduce several issues. First, they are not suitable for offline environments where internet access is unavailable or unreliable. Second, transmitting image data to external servers raises privacy and security concerns. Third, the dependency on cloud infrastructure increases latency and operational cost, making real-time applications difficult to achieve.
+
+Additionally, traditional reconstruction techniques are computationally intensive and not optimized for resource-constrained devices like smartphones. As a result, there is a lack of efficient solutions that can perform 3D reconstruction directly on mobile devices while maintaining a balance between accuracy and performance.
+
+Another important challenge is energy consumption. Continuous processing of images and running machine learning models can significantly drain battery power, making it impractical for long-term usage on mobile devices. Moreover, memory limitations restrict the size of models and data that can be processed on-device.
+
+Therefore, the core problem addressed in this project is to design and implement a lightweight, efficient, and fully offline 2D-to-3D reconstruction system that can operate effectively on ARM-based mobile devices. \\ \\
+
+% Section 2
+\section{Objectives}
+
+The primary objective of this project is to develop a mobile-based system capable of reconstructing 3D models from 2D images without relying on external computation. To achieve this, the following specific objectives are defined:
+
+\begin{itemize}
+    \item To design a system that captures one or more images using a mobile device camera.
+    \item To implement a lightweight depth estimation module using on-device neural networks.
+    \item To estimate camera poses through feature matching techniques between captured frames.
+    \item To develop an efficient depth fusion method to combine multiple depth maps into a unified 3D representation.
+    \item To generate and visualize a 3D surface model directly on the mobile device in real time.
+    \item To ensure the system operates fully offline, preserving user privacy and reducing dependency on cloud services.
+\end{itemize}
+
+In addition to these core objectives, the project also aims to ensure that the system is user-friendly and easy to operate. The interface should allow users to capture images, process data, and visualize results without requiring technical expertise. Furthermore, the system should maintain a balance between computational efficiency and reconstruction quality.
+
+These objectives collectively aim to create a practical and efficient solution for mobile 3D reconstruction. \\ \\
+
+% Section 3
+\section{System Requirements}
+
+In addition to the primary objectives, the project also focuses on optimizing performance and usability. This includes reducing computational overhead, minimizing memory usage, and ensuring smooth user interaction during the capture and visualization process.
+
+Another important consideration is scalability. The system should be adaptable to different mobile devices with varying hardware capabilities. Furthermore, the design should allow future improvements, such as integrating advanced depth estimation models or enhancing reconstruction accuracy.
+
+The system must also satisfy certain functional and non-functional requirements. Functional requirements include capturing images, processing depth information, generating 3D models, and displaying results to the user. Non-functional requirements include efficiency, reliability, low latency, and minimal resource consumption.
+
+In terms of software requirements, the system should support mobile platforms and integrate frameworks such as ARCore and TensorFlow Lite for efficient implementation. Hardware requirements include a smartphone with camera capabilities and sufficient processing power to handle real-time operations.
+
+By addressing these aspects, the project aims not only to solve the core problem but also to provide a flexible and user-friendly solution suitable for real-world applications.
+
+% Conclusion
+In summary, this chapter defines the challenges associated with existing 3D reconstruction methods and outlines the objectives of the proposed system. The focus is on developing a lightweight, efficient, and fully offline solution that bridges the gap between high-performance reconstruction techniques and the limitations of mobile devices.
+
+The identified problem and defined objectives serve as the foundation for the system design and implementation discussed in the following chapters.

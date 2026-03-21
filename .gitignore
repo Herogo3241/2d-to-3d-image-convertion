@@ -24,3 +24,10 @@ visualizations/session_*
 *.out
 *.snm
 *.toc
+*.glo
+*.ist
+*.lot
+*.lof
+*.sty
+*.aux
+*.acn
